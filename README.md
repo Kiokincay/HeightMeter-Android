@@ -4,7 +4,7 @@ A native Android application for Arduino ultrasonic height measurement through H
 
 ## Included
 
-- Landscape Android application
+- Landscape and portrait Android application
 - Manual HC-05/HC-06 pairing and selection
 - No random Bluetooth device connection
 - `C` calibration command
@@ -14,9 +14,7 @@ A native Android application for Arduino ultrasonic height measurement through H
 - Animated ruler and measurement history
 - First-run country selection and automatic localized date/time
 - Language and System/Dark/Light appearance settings
-- Guest mode, sign-in, sign-up, account panel, and 8-digit verification interface
-- Developer Options under the upper-right Guest/Account control
-- Developer passcode: `9`
+- Guest mode, sign-in and sign-up
 - Supabase fields for real cross-device accounts and email verification
 
 ## Build the APK entirely in Chrome with GitHub Actions
