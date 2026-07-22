@@ -1,0 +1,9 @@
+Height Meter v1.1.1 correction
+
+Fixed:
+- Signup and verification buttons now use the new gender/date-of-birth account logic.
+- Developer Options is hidden from public view. Hold the Account button for 4 seconds, then enter the private passphrase.
+- Local date handling is corrected.
+- Version bumped to 1.1.1 (versionCode 3).
+
+Real Gmail email verification still requires a configured Supabase project and email delivery. An APK alone cannot send secure email codes.
