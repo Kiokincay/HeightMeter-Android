@@ -8,6 +8,9 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -16,7 +19,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Toast;
 
 import org.json.JSONObject;
 
@@ -25,6 +27,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -38,6 +42,12 @@ public class MainActivity extends Activity {
     private static final int REQUEST_BLUETOOTH_PERMISSIONS = 1201;
     private static final UUID SERIAL_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
+    // SHA-256 of the owner's private developer passphrase. The plain phrase is not stored here.
+    private static final String DEVELOPER_PASS_HASH =
+            "1974e32d047832d6e6dd87a7f86fbfe7faaff985fa8c6c47483390f66dffa4c9";
+    private static final int MAX_DEVELOPER_ATTEMPTS = 5;
+    private static final long DEVELOPER_LOCK_MS = 5L * 60L * 1000L;
+
     private WebView webView;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothSocket bluetoothSocket;
@@ -46,6 +56,8 @@ public class MainActivity extends Activity {
     private volatile boolean readerRunning = false;
     private boolean waitingForBluetoothSettings = false;
     private boolean webReady = false;
+    private int developerFailedAttempts = 0;
+    private long developerLockedUntil = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,6 +85,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 webReady = true;
                 sendToWeb("STATUS|READY|Android Bluetooth bridge active");
+                notifySystemTheme();
             }
         });
         webView.loadUrl("file:///android_asset/index.html");
@@ -81,10 +94,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (webView != null) webView.postDelayed(this::notifySystemTheme, 150);
         if (waitingForBluetoothSettings) {
             waitingForBluetoothSettings = false;
             webView.postDelayed(this::showPairedDevicePicker, 450);
         }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        notifySystemTheme();
     }
 
     @Override
@@ -93,6 +113,21 @@ public class MainActivity extends Activity {
         ioExecutor.shutdownNow();
         if (webView != null) webView.destroy();
         super.onDestroy();
+    }
+
+    private String currentSystemTheme() {
+        int mode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return mode == Configuration.UI_MODE_NIGHT_YES ? "dark" : "light";
+    }
+
+    private void notifySystemTheme() {
+        String theme = currentSystemTheme();
+        runOnUiThread(() -> {
+            int color = Color.parseColor(theme.equals("dark") ? "#07111F" : "#EEF7FF");
+            getWindow().setStatusBarColor(color);
+            getWindow().setNavigationBarColor(color);
+        });
+        sendToWeb("THEME|SYSTEM|" + theme);
     }
 
     private boolean hasBluetoothPermission() {
@@ -283,6 +318,59 @@ public class MainActivity extends Activity {
         });
     }
 
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+            StringBuilder output = new StringBuilder(bytes.length * 2);
+            for (byte item : bytes) output.append(String.format(Locale.ROOT, "%02x", item));
+            return output.toString();
+        } catch (NoSuchAlgorithmException impossible) {
+            return "";
+        }
+    }
+
+    private synchronized boolean verifyDeveloperPassphrase(String passphrase) {
+        long now = System.currentTimeMillis();
+        if (now < developerLockedUntil) return false;
+        boolean valid = MessageDigest.isEqual(
+                DEVELOPER_PASS_HASH.getBytes(StandardCharsets.UTF_8),
+                sha256(passphrase).getBytes(StandardCharsets.UTF_8)
+        );
+        if (valid) {
+            developerFailedAttempts = 0;
+            developerLockedUntil = 0L;
+            return true;
+        }
+        developerFailedAttempts++;
+        if (developerFailedAttempts >= MAX_DEVELOPER_ATTEMPTS) {
+            developerFailedAttempts = 0;
+            developerLockedUntil = now + DEVELOPER_LOCK_MS;
+        }
+        return false;
+    }
+
+    private void openEmailApplication() {
+        runOnUiThread(() -> {
+            try {
+                Intent gmail = getPackageManager().getLaunchIntentForPackage("com.google.android.gm");
+                if (gmail != null) {
+                    startActivity(gmail);
+                    return;
+                }
+                Intent email = new Intent(Intent.ACTION_MAIN);
+                email.addCategory(Intent.CATEGORY_APP_EMAIL);
+                startActivity(email);
+            } catch (Exception error) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com/")));
+                } catch (Exception ignored) {
+                    sendToWeb("ERROR|No email application was found.");
+                }
+            }
+        });
+    }
+
     public class AndroidBridge {
         @JavascriptInterface
         public void postMessage(String message) {
@@ -298,8 +386,39 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public String platform() {
-            return "Android";
+        public String platform() { return "Android"; }
+
+        @JavascriptInterface
+        public String systemTheme() { return currentSystemTheme(); }
+
+        @JavascriptInterface
+        public String appVersion() { return BuildConfig.VERSION_NAME; }
+
+        @JavascriptInterface
+        public boolean unlockDeveloper(String passphrase) { return verifyDeveloperPassphrase(passphrase); }
+
+        @JavascriptInterface
+        public long developerLockSeconds() {
+            long remaining = developerLockedUntil - System.currentTimeMillis();
+            return Math.max(0L, (remaining + 999L) / 1000L);
+        }
+
+        @JavascriptInterface
+        public void openEmailApp() { openEmailApplication(); }
+
+        @JavascriptInterface
+        public String deviceInfo() {
+            JSONObject info = new JSONObject();
+            try {
+                info.put("manufacturer", Build.MANUFACTURER);
+                info.put("model", Build.MODEL);
+                info.put("android", Build.VERSION.RELEASE);
+                info.put("sdk", Build.VERSION.SDK_INT);
+                info.put("appVersion", BuildConfig.VERSION_NAME);
+                info.put("bluetoothSupported", bluetoothAdapter != null);
+                info.put("bluetoothEnabled", bluetoothAdapter != null && bluetoothAdapter.isEnabled());
+            } catch (Exception ignored) {}
+            return info.toString();
         }
     }
 }

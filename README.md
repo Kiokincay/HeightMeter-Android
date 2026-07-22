@@ -4,7 +4,7 @@ A native Android application for Arduino ultrasonic height measurement through H
 
 ## Included
 
-- Landscape and portrait Android application
+- Landscape Android application
 - Manual HC-05/HC-06 pairing and selection
 - No random Bluetooth device connection
 - `C` calibration command
@@ -14,7 +14,9 @@ A native Android application for Arduino ultrasonic height measurement through H
 - Animated ruler and measurement history
 - First-run country selection and automatic localized date/time
 - Language and System/Dark/Light appearance settings
-- Guest mode, sign-in and sign-up
+- Guest mode, sign-in, sign-up, account panel, and 8-digit verification interface
+- Developer Options under the upper-right Guest/Account control
+- Developer passcode: `9`
 - Supabase fields for real cross-device accounts and email verification
 
 ## Build the APK entirely in Chrome with GitHub Actions
@@ -27,7 +29,7 @@ A native Android application for Arduino ultrasonic height measurement through H
 6. Select **Build Height Meter APK**.
 7. Press **Run workflow**.
 8. When the workflow finishes, open it and download the artifact named **HeightMeter-Android-APK**.
-9. Extract the ZIP and install `HeightMeter-v1.0.apk` on Android.
+9. Extract the ZIP and install `HeightMeter-v1.1.0.apk` on Android.
 
 The generated debug APK is already signed by the Android build system and can be installed directly for testing.
 
@@ -69,3 +71,7 @@ The interface is ready for Supabase authentication, but real emails require:
 - Email OTP length set to 8 digits
 
 Enter the project URL and key inside **Developer Options**. The app never asks for the user's Gmail or Outlook mailbox password; it uses a Height Meter account password and verifies mailbox ownership with the emailed code.
+
+
+## Version 1.1.0
+See `CHANGELOG-v1.1.0.md` and `UPDATE-INSTRUCTIONS.txt`.

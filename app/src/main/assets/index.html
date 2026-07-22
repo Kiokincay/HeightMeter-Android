@@ -95,4 +95,151 @@ $('measureBtn').onclick=()=>{if(!connected)return toast('Connect HC-05 first');i
 $('unitCm').onclick=()=>setUnit('cm');$('unitM').onclick=()=>setUnit('m');$('clearHistory').onclick=()=>{history=[];saveHistory();renderHistory();toast('History cleared')};
 $('unlockDeveloper').onclick=()=>{if($('developerPasscode').value!=='9'){return $('developerPassError').textContent='Incorrect developer passcode.'}closeOverlay('developerLockOverlay');fillDeveloper();openOverlay('developerOverlay');$('developerPasscode').value='';$('developerPassError').textContent=''};$('saveDeveloper').onclick=()=>{state.appTitle=$('devAppTitle').value.trim()||'Height Meter';state.subtitle=$('devSubtitle').value.trim();state.measureCommand=$('devMeasureCommand').value.trim()||'M';state.calCommand=$('devCalCommand').value.trim()||'C';state.minHeight=Number($('devMin').value)||30;state.maxHeight=Number($('devMax').value)||250;state.website=$('devWebsite').value.trim();state.privacy=$('devPrivacy').value.trim();state.support=$('devSupport').value.trim();state.cloudUrl=$('devCloudUrl').value.trim();state.cloudKey=$('devCloudKey').value.trim();saveState();updateAuthStatus();applyUnitDisplay();closeOverlay('developerOverlay');toast('Developer settings saved')};$('exportConfig').onclick=()=>{const a=document.createElement('a'),blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});a.href=URL.createObjectURL(blob);a.download='height-meter-config.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)};$('resetConfig').onclick=()=>{const keep={country:state.country,language:state.language,theme:state.theme,unit:state.unit,firstRun:false};state={...defaults,...keep};saveState();fillDeveloper();toast('Developer settings reset')};$('openMainSite').onclick=()=>{if(!state.website)return toast('Add the main website URL first');window.open(state.website,'_blank')};
 systemDark.addEventListener?.('change',()=>{if(state.theme==='system')applyTheme()});window.addEventListener('message',e=>{const m=String(e.data||'');if(m.startsWith('HEIGHT:')){const cm=parseFloat(m.split(':')[1]);if(Number.isFinite(cm))setHeight(cm)}});init();
-</script></body></html>
+</script><style>
+/* Height Meter v1.1.0 additions */
+.v11ProfileGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.v11RangeGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.growthSummary{margin:10px 0 2px;padding:11px 13px;border-radius:15px;border:1px solid var(--line);background:rgba(65,231,220,.055);display:grid;gap:4px}.growthSummary b{font-size:12px;color:var(--cyan)}.growthSummary small{font-size:10px;color:var(--muted);line-height:1.45}.historyDelta{display:block;margin-top:4px;font-size:9px;font-weight:900}.historyDelta.up{color:var(--green)}.historyDelta.down{color:var(--red)}.historyDelta.same{color:var(--muted)}.v11Tag{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;border:1px solid var(--line);font-size:9px;color:var(--muted)}.developerDiagnostics{display:grid;gap:10px}.developerDiagnostics textarea{width:100%;min-height:115px;resize:vertical;border-radius:14px;border:1px solid var(--line);background:rgba(0,0,0,.14);color:var(--text);padding:11px;font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.developerInfo{padding:11px;border-radius:14px;background:rgba(58,174,255,.07);border:1px solid rgba(58,174,255,.16);font-size:10px;line-height:1.55;color:var(--muted);white-space:pre-wrap}.v11InlineActions{display:grid;grid-template-columns:1fr auto;gap:8px}.verificationSafety{margin-top:10px;padding:10px 12px;border:1px solid rgba(65,231,220,.18);background:rgba(65,231,220,.06);border-radius:14px;font-size:10px;line-height:1.55;color:var(--muted)}.verificationSafety b{color:var(--cyan)}
+@media(max-width:650px){.v11ProfileGrid,.v11RangeGrid{grid-template-columns:1fr}}
+</style>
+<script>
+(() => {
+'use strict';
+const V11_PASS_HASH='1974e32d047832d6e6dd87a7f86fbfe7faaff985fa8c6c47483390f66dffa4c9';
+let v11NativeTheme='';
+let v11RawLog=[];
+const v11Today=()=>new Date().toISOString().slice(0,10);
+const v11Country=()=>countryByCode(state.country);
+const v11Timezone=()=>v11Country().tz||Intl.DateTimeFormat().resolvedOptions().timeZone;
+const v11Profile=()=>({
+  gender:(account&&!account.guest&&account.gender)||state.gender||'male',
+  dateOfBirth:(account&&!account.guest&&account.dateOfBirth)||state.dateOfBirth||''
+});
+function v11Age(dob){if(!dob)return null;const b=new Date(dob+'T12:00:00');if(!Number.isFinite(b.getTime()))return null;const n=new Date();let a=n.getFullYear()-b.getFullYear();const m=n.getMonth()-b.getMonth();if(m<0||(m===0&&n.getDate()<b.getDate()))a--;return a>=0?a:null}
+function v11ProfileLabel(){const p=v11Profile(),age=v11Age(p.dateOfBirth);return `${p.gender==='female'?'Female':'Male'}${age!==null?' • '+age+' years':''}`}
+function v11FormatDateTime(ms){try{return new Intl.DateTimeFormat(state.language||'en',{dateStyle:'medium',timeStyle:'short',timeZone:v11Timezone()}).format(new Date(ms))}catch{return new Date(ms).toLocaleString()}}
+function v11Esc(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function v11FormatDelta(delta){const abs=Math.abs(delta);const value=state.unit==='cm'?abs.toFixed(1)+' '+t('cm'):(abs/100).toFixed(3)+' '+t('m');if(Math.abs(delta)<0.05)return {text:'No change from previous measurement',cls:'same',icon:'•'};return delta>0?{text:`${value} taller than previous`,cls:'up',icon:'↑'}:{text:`${value} shorter than previous`,cls:'down',icon:'↓'}}
+function v11UpdateGrowth(){const box=$('growthSummary');if(!box)return;const p=v11Profile();if(!history.length){box.innerHTML=`<b>Growth comparison</b><small>No earlier measurement yet • ${v11Esc(v11ProfileLabel())}</small>`;return}const latest=history[0],previous=history[1];if(!previous){box.innerHTML=`<b>First saved measurement</b><small>${formatHeight(latest.cm)} ${state.unit==='cm'?t('cm'):t('m')} • ${v11Esc(v11ProfileLabel())}</small>`;return}const change=v11FormatDelta(latest.cm-previous.cm);const oldest=history[history.length-1];const overall=v11FormatDelta(latest.cm-oldest.cm);box.innerHTML=`<b>${change.icon} ${v11Esc(change.text)}</b><small>Since first saved measurement: ${overall.icon} ${v11Esc(overall.text.replace(' from previous measurement','').replace(' than previous',''))} • ${v11Esc(v11ProfileLabel())}</small>`}
+
+// Add defaults without disturbing existing saved data.
+defaults.gender='male';defaults.dateOfBirth='';
+if(!state.gender)state.gender='male';if(!('dateOfBirth' in state))state.dateOfBirth='';saveState();
+
+// Signup profile fields.
+const nameField=$('nameField');
+if(nameField&&!$('signupProfileFields'))nameField.insertAdjacentHTML('afterend',`<div id="signupProfileFields" class="v11ProfileGrid hidden"><div class="field"><label>Gender</label><select id="authGender"><option value="male">Male</option><option value="female">Female</option></select></div><div class="field"><label>Date of birth</label><input id="authDob" type="date" max="${v11Today()}"></div></div>`);
+const oldOpenAuth=openAuth;
+openAuth=function(mode){oldOpenAuth(mode);$('signupProfileFields')?.classList.toggle('hidden',mode!=='signup');if(mode==='signup'){$('authGender').value=state.gender||'male';$('authDob').value=state.dateOfBirth||''}};
+
+submitAuthentication=async function(){
+ const email=$('authEmail').value.trim().toLowerCase(),pass=$('authPassword').value,name=$('authName').value.trim(),gender=$('authGender')?.value||'male',dateOfBirth=$('authDob')?.value||'';
+ $('authError').textContent='';
+ if(!/^\S+@\S+\.\S+$/.test(email))return $('authError').textContent='Enter a valid email address.';
+ if(pass.length<8)return $('authError').textContent='The Height Meter password must contain at least 8 characters.';
+ if(authMode==='signup'&&!name)return $('authError').textContent='Enter your full name.';
+ if(authMode==='signup'&&!dateOfBirth)return $('authError').textContent='Select the date of birth.';
+ if(dateOfBirth>v11Today())return $('authError').textContent='Date of birth cannot be in the future.';
+ setBusy($('authSubmit'),true,'Please wait…');
+ try{
+  if(hasCloud()){
+   if(authMode==='signup'){
+    await authFetch('/auth/v1/signup',{email,password:pass,data:{full_name:name,gender,date_of_birth:dateOfBirth}});
+    pendingAuth={mode:'signup',email,name,gender,dateOfBirth,cloud:true};showVerification(email,name,'signup');toast('Verification code sent to '+providerName(email));
+   }else{
+    const passwordSession=await authFetch('/auth/v1/token?grant_type=password',{email,password:pass});
+    await authFetch('/auth/v1/otp',{email,create_user:false},passwordSession.access_token||'');
+    const meta=passwordSession.user?.user_metadata||{};
+    pendingAuth={mode:'signin',email,name:meta.full_name||email.split('@')[0],gender:meta.gender||state.gender||'male',dateOfBirth:meta.date_of_birth||state.dateOfBirth||'',cloud:true,passwordSession};
+    showVerification(email,pendingAuth.name,'signin');toast('New verification code sent');
+   }
+  }else{
+   const users=demoUsers(),digest=await sha256(pass);
+   if(authMode==='signup'){
+    if(users[email])throw new Error('This preview account already exists. Use Sign In.');
+    const code=random8();users[email]={email,name,gender,dateOfBirth,passwordHash:digest,verified:false};saveDemoUsers(users);
+    pendingAuth={mode:'signup',email,name,gender,dateOfBirth,cloud:false,code,expires:Date.now()+10*60*1000};showVerification(email,name,'signup',code);
+   }else{
+    const user=users[email];if(!user||user.passwordHash!==digest)throw new Error('No matching Height Meter account, or the password is incorrect.');
+    const code=random8();pendingAuth={mode:'signin',email,name:user.name,gender:user.gender||'male',dateOfBirth:user.dateOfBirth||'',cloud:false,code,expires:Date.now()+10*60*1000};showVerification(email,user.name,'signin',code);
+   }
+  }
+ }catch(e){$('authError').textContent=e.message||'Sign-in failed.'}finally{setBusy($('authSubmit'),false,authMode==='signup'?'Create account & send code':'Sign in & send code')}
+};
+verifyAuthentication=async function(){
+ const token=$('verifyCode').value.replace(/\D/g,'');$('verifyError').textContent='';
+ if(token.length!==8)return $('verifyError').textContent='Enter exactly 8 numbers.';if(!pendingAuth)return $('verifyError').textContent='Start the sign-in process again.';
+ setBusy($('verifySubmit'),true,'Verifying…');
+ try{
+  let session=null,user=null;
+  if(pendingAuth.cloud){try{session=await authFetch('/auth/v1/verify',{email:pendingAuth.email,token,type:'email'})}catch(first){if(pendingAuth.mode==='signup')session=await authFetch('/auth/v1/verify',{email:pendingAuth.email,token,type:'signup'});else throw first}user=session.user||pendingAuth.passwordSession?.user}
+  else{if(Date.now()>pendingAuth.expires)throw new Error('This code expired. Request another code.');if(token!==pendingAuth.code)throw new Error('The verification code is incorrect.');const users=demoUsers();if(users[pendingAuth.email]){users[pendingAuth.email].verified=true;saveDemoUsers(users)}user={email:pendingAuth.email,user_metadata:{full_name:pendingAuth.name,gender:pendingAuth.gender,date_of_birth:pendingAuth.dateOfBirth}}}
+  const meta=user?.user_metadata||{};
+  account={guest:false,name:meta.full_name||pendingAuth.name||pendingAuth.email.split('@')[0],email:pendingAuth.email,gender:meta.gender||pendingAuth.gender||'male',dateOfBirth:meta.date_of_birth||pendingAuth.dateOfBirth||'',accessToken:session?.access_token||'',refreshToken:session?.refresh_token||'',cloud:!!pendingAuth.cloud};
+  state.gender=account.gender;state.dateOfBirth=account.dateOfBirth;saveState();saveAccount();pendingAuth=null;clearInterval(resendTimer);enterApp();toast('Email verified and signed in');
+ }catch(e){$('verifyError').textContent=e.message||'Verification failed.'}finally{setBusy($('verifySubmit'),false,t('verify'))}
+};
+$('authSubmit').onclick=submitAuthentication;$('verifySubmit').onclick=verifyAuthentication;
+
+// Verification is delivered to the mailbox; it is entered in Height Meter.
+const verifyActions=document.querySelector('.verifyActions');
+if(verifyActions&&!$('openEmailApp')){verifyActions.style.gridTemplateColumns='1fr .72fr .72fr';verifyActions.insertAdjacentHTML('beforeend','<button id="openEmailApp" class="secondary" type="button">Open Gmail</button>');$('openEmailApp').onclick=()=>{try{window.AndroidBridge?.openEmailApp?.()}catch{window.open('https://mail.google.com/','_blank')}}}
+$('verifyForm')?.querySelector('.providerLine')?.insertAdjacentHTML('afterend','<div class="verificationSafety"><b>Security:</b> Open Gmail to read the code, then return and enter it here. Never enter your Gmail password in Height Meter.</div>');
+
+// Settings: profile + measurement limits.
+const settingsSave=$('saveSettings');
+if(settingsSave&&!$('settingsProfileV11'))settingsSave.insertAdjacentHTML('beforebegin',`<div id="settingsProfileV11" class="settingGroup"><h4>Personal profile</h4><div class="v11ProfileGrid"><div class="field"><label>Gender</label><select id="settingsGender"><option value="male">Male</option><option value="female">Female</option></select></div><div class="field"><label>Date of birth</label><input id="settingsDob" type="date" max="${v11Today()}"></div></div><div class="note">Used only to label your personal growth history.</div></div><div class="settingGroup"><h4>Accepted measurement range</h4><div class="v11RangeGrid"><div class="field"><label>Minimum height (cm)</label><input id="settingsMin" type="number" min="1" max="399" step="1"></div><div class="field"><label>Maximum height (cm)</label><input id="settingsMax" type="number" min="2" max="400" step="1"></div></div><div class="note">Measurements outside this range are rejected.</div></div>`);
+const oldSettingsClick=$('settingsBtn').onclick;
+$('settingsBtn').onclick=()=>{if(oldSettingsClick)oldSettingsClick();const p=v11Profile();$('settingsGender').value=p.gender;$('settingsDob').value=p.dateOfBirth;$('settingsMin').value=state.minHeight;$('settingsMax').value=state.maxHeight};
+$('saveSettings').onclick=()=>{
+ const min=Number($('settingsMin').value),max=Number($('settingsMax').value),dob=$('settingsDob').value,gender=$('settingsGender').value;
+ if(!Number.isFinite(min)||!Number.isFinite(max)||min<1||max>400||min>=max)return toast('Enter a valid minimum and maximum height.');
+ if(dob&&dob>v11Today())return toast('Date of birth cannot be in the future.');
+ state.country=$('settingsCountry').value;state.language=$('settingsLanguage').value;state.gender=gender;state.dateOfBirth=dob;state.minHeight=min;state.maxHeight=max;
+ if(account&&!account.guest){account.gender=gender;account.dateOfBirth=dob;saveAccount()}
+ saveState();applyTheme();applyTranslation();updateDate();renderHistory();updateAccount();closeOverlay('settingsOverlay');toast('Settings saved');
+};
+
+// Account profile display and editable profile save.
+const profileEmail=$('profileEmail')?.closest('.field');
+if(profileEmail&&!$('accountProfileV11'))profileEmail.insertAdjacentHTML('afterend',`<div id="accountProfileV11" class="v11ProfileGrid"><div class="field"><label>Gender</label><select id="profileGender"><option value="male">Male</option><option value="female">Female</option></select></div><div class="field"><label>Date of birth</label><input id="profileDob" type="date" max="${v11Today()}"></div></div><button id="saveProfileV11" class="secondary wide" type="button">Save profile</button>`);
+const oldUpdateAccount=updateAccount;
+updateAccount=function(){oldUpdateAccount();const p=v11Profile();if($('profileGender'))$('profileGender').value=p.gender;if($('profileDob'))$('profileDob').value=p.dateOfBirth;if($('accountEmail')&&account&&!account.guest)$('accountEmail').textContent=`${account.email} • ${v11ProfileLabel()}`};
+$('saveProfileV11').onclick=()=>{const gender=$('profileGender').value,dob=$('profileDob').value;if(dob&&dob>v11Today())return toast('Date of birth cannot be in the future.');state.gender=gender;state.dateOfBirth=dob;if(account&&!account.guest){account.name=$('profileName').value.trim()||account.name;account.gender=gender;account.dateOfBirth=dob;saveAccount()}saveState();updateAccount();renderHistory();toast('Profile saved')};
+
+// Growth summary and timezone-correct history.
+const measureStatus=$('measureStatus');
+if(measureStatus&&!$('growthSummary'))measureStatus.insertAdjacentHTML('afterend','<div id="growthSummary" class="growthSummary"><b>Growth comparison</b><small>No earlier measurement yet.</small></div>');
+renderHistory=function(){
+ const list=$('historyList');$('statCount').textContent=history.length;v11UpdateGrowth();
+ if(!history.length){list.innerHTML='<div class="note" style="padding:18px;text-align:center">No measurements saved yet.</div>';return}
+ list.innerHTML=history.slice(0,20).map((h,i)=>{const older=history[i+1],change=older?v11FormatDelta(h.cm-older.cm):null;return `<div class="historyItem"><div class="historyIcon">↕</div><div><b>${v11Esc(h.name||'Height measurement')}</b><small>${v11Esc(v11FormatDateTime(h.time))} • ${v11Esc(v11Country().name)}</small>${change?`<span class="historyDelta ${change.cls}">${change.icon} ${v11Esc(change.text)}</span>`:'<span class="historyDelta same">First saved measurement</span>'}</div><div class="historyValue">${state.unit==='cm'?Number(h.cm).toFixed(1)+' '+t('cm'):(Number(h.cm)/100).toFixed(3)+' '+t('m')}</div></div>`}).join('');
+};
+
+// Follow the Android system theme reliably.
+try{v11NativeTheme=window.AndroidBridge?.systemTheme?.()||''}catch{}
+resolvedTheme=function(){return state.theme==='system'?(v11NativeTheme|| (systemDark.matches?'dark':'light')):state.theme};
+applyTheme=function(){document.documentElement.dataset.theme=resolvedTheme();$$('[data-theme-choice]').forEach(b=>b.classList.toggle('active',b.dataset.themeChoice===state.theme));document.querySelector('meta[name=theme-color]').content=resolvedTheme()==='dark'?'#071425':'#eef7ff'};
+
+// Strong private developer lock and useful diagnostics.
+const devPass=$('developerPasscode');if(devPass){devPass.type='password';devPass.removeAttribute('inputmode');devPass.maxLength=64;devPass.placeholder='Private owner passphrase'}
+['devMin','devMax'].forEach(id=>$(id)?.closest('.field')?.remove());
+const devFooter=document.querySelector('.devFooter');
+if(devFooter&&!$('developerToolsV11'))devFooter.insertAdjacentHTML('beforebegin',`<div id="developerToolsV11" class="devGroup full developerDiagnostics"><h4>Diagnostics & maintenance</h4><div id="developerDeviceInfo" class="developerInfo">App version 1.1.0</div><div class="v11InlineActions"><input id="developerCustomCommand" maxlength="32" placeholder="Custom Bluetooth command"><button id="sendDeveloperCommand" class="ghost" type="button">Send</button></div><textarea id="developerRawLog" readonly placeholder="Raw HC-05 / HC-06 messages appear here"></textarea><div class="choiceRow"><button id="exportHistoryV11" class="secondary" type="button">Export history</button><button id="clearRawV11" class="secondary" type="button">Clear raw log</button><button id="resetCalibrationV11" class="secondary" type="button">Reset calibration</button></div><div class="choiceRow"><button id="copyDiagnosticsV11" class="ghost" type="button">Copy diagnostics</button><button id="clearLocalCacheV11" class="danger" type="button">Clear local app data</button><button id="restoreDefaultsV11" class="danger" type="button">Restore defaults</button></div></div>`);
+fillDeveloper=function(){$('devAppTitle').value=state.appTitle;$('devSubtitle').value=state.subtitle;$('devMeasureCommand').value=state.measureCommand;$('devCalCommand').value=state.calCommand;$('devWebsite').value=state.website;$('devPrivacy').value=state.privacy;$('devSupport').value=state.support;$('devCloudUrl').value=state.cloudUrl;$('devCloudKey').value=state.cloudKey;try{const d=JSON.parse(window.AndroidBridge?.deviceInfo?.()||'{}');$('developerDeviceInfo').textContent=`App ${d.appVersion||'1.1.0'} • Android ${d.android||'?'} (SDK ${d.sdk||'?'})\n${d.manufacturer||''} ${d.model||''}\nBluetooth: ${d.bluetoothSupported?(d.bluetoothEnabled?'enabled':'disabled'):'not supported'}`}catch{$('developerDeviceInfo').textContent='App version 1.1.0 • Browser preview'}};
+$('unlockDeveloper').onclick=async()=>{const value=$('developerPasscode').value;let ok=false,locked=0;try{ok=!!window.AndroidBridge?.unlockDeveloper?.(value);locked=Number(window.AndroidBridge?.developerLockSeconds?.()||0)}catch{ok=(await sha256(value))===V11_PASS_HASH}if(!ok){$('developerPassError').textContent=locked>0?`Locked for ${Math.ceil(locked/60)} minute(s) after repeated failures.`:'Incorrect developer passphrase.';return}closeOverlay('developerLockOverlay');fillDeveloper();openOverlay('developerOverlay');$('developerPasscode').value='';$('developerPassError').textContent=''};
+$('saveDeveloper').onclick=()=>{state.appTitle=$('devAppTitle').value.trim()||'Height Meter';state.subtitle=$('devSubtitle').value.trim();state.measureCommand=$('devMeasureCommand').value.trim()||'M';state.calCommand=$('devCalCommand').value.trim()||'C';state.website=$('devWebsite').value.trim();state.privacy=$('devPrivacy').value.trim();state.support=$('devSupport').value.trim();state.cloudUrl=$('devCloudUrl').value.trim();state.cloudKey=$('devCloudKey').value.trim();saveState();updateAuthStatus();closeOverlay('developerOverlay');toast('Developer settings saved')};
+$('sendDeveloperCommand').onclick=()=>{const cmd=$('developerCustomCommand').value.trim();if(!cmd)return toast('Enter a command');if(!connected)return toast('Connect HC-05/HC-06 first');native(cmd);toast('Command sent')};
+$('exportHistoryV11').onclick=()=>{const payload={version:'1.1.0',profile:v11Profile(),country:v11Country(),exportedAt:new Date().toISOString(),measurements:history};const a=document.createElement('a'),blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});a.href=URL.createObjectURL(blob);a.download='height-meter-history.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)};
+$('clearRawV11').onclick=()=>{v11RawLog=[];$('developerRawLog').value=''};
+$('resetCalibrationV11').onclick=()=>{calibrated=false;$('statCalibration').textContent='Required';toast('Calibration state reset')};
+$('copyDiagnosticsV11').onclick=async()=>{const text=$('developerDeviceInfo').textContent+'\n\n'+v11RawLog.join('\n');try{await navigator.clipboard.writeText(text);toast('Diagnostics copied')}catch{toast('Copy is unavailable on this phone')}};
+$('clearLocalCacheV11').onclick=()=>{if(!confirm('Clear accounts, settings and measurement history from this phone?'))return;localStorage.clear();location.reload()};
+$('restoreDefaultsV11').onclick=()=>{if(!confirm('Restore application configuration defaults? Measurement history will stay.'))return;const keep={country:state.country,language:state.language,theme:state.theme,unit:state.unit,firstRun:false,gender:state.gender,dateOfBirth:state.dateOfBirth};state={...defaults,...keep};saveState();fillDeveloper();toast('Defaults restored')};
+
+// Wrap native receive for system theme and raw diagnostics, preserving Bluetooth behavior.
+const oldNativeReceive=window.HeightMeterNative.receive.bind(window.HeightMeterNative);
+window.HeightMeterNative.receive=function(message){const text=String(message||'');if(text.startsWith('THEME|SYSTEM|')){v11NativeTheme=text.split('|')[2]||'light';if(state.theme==='system')applyTheme();return}if(text.startsWith('DATA|')){v11RawLog.unshift(new Date().toISOString()+'  '+text.slice(5));v11RawLog=v11RawLog.slice(0,100);if($('developerRawLog'))$('developerRawLog').value=v11RawLog.join('\n')}oldNativeReceive(message)};
+
+applyTheme();updateAccount();renderHistory();
+})();
+</script>
+</body></html>

@@ -1,0 +1,15 @@
+HEIGHT METER v1.1.0 UPDATE
+
+1. Upload all files and folders from this project to the existing GitHub repository, replacing the previous files.
+2. Preserve the folder paths, especially:
+   app/src/main/assets/index.html
+   app/src/main/java/com/heightmeter/app/MainActivity.java
+   app/src/main/AndroidManifest.xml
+   .github/workflows/build-apk.yml
+3. Open GitHub > Actions > Build Height Meter APK.
+4. Wait for the green check.
+5. Download the artifact named HeightMeter-Android-v1.1.0-APK.
+6. Extract HeightMeter-v1.1.0.apk.
+7. Install it over v1.0. Android should recognize it as an update because the package name remains com.heightmeter.app and versionCode is now 2.
+
+Developer owner passphrase is provided privately in the ChatGPT conversation. Do not put it in public documentation.
