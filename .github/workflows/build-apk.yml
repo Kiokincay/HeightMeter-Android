@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
 
@@ -21,6 +22,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -30,12 +37,12 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk HeightMeter-v1.1.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk HeightMeter-v1.1.2.apk
 
-      - name: Upload APK for Chrome download
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HeightMeter-Android-v1.1.0-APK
-          path: HeightMeter-v1.1.0.apk
+          name: HeightMeter-Android-v1.1.2-APK
+          path: HeightMeter-v1.1.2.apk
           if-no-files-found: error
           retention-days: 30
